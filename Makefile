@@ -10,7 +10,7 @@ all:
 	@echo "venv         Set up dev environment"
 
 PYTHON: setup.py
-	virtualenv -p python3 --no-site-packages $(VENV_NAME)
+	virtualenv -p python3 --system-site-packages $(VENV_NAME)
 	$(PYTHON) setup.py develop
 	$(VENV_NAME)/bin/pip install -r requirements_dev.txt
 

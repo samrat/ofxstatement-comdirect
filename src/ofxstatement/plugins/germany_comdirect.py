@@ -11,13 +11,13 @@ from ofxstatement.statement import (
     )
 
 
-class SparkasseFreiburgPlugin(Plugin):
+class ComdirectPlugin(Plugin):
     """
-    Plugin for German bank Sparkasse Freiburg
+    Plugin for German bank Comdirect
     """
 
     def get_parser(self, filename):
-        return SparkasseFreiburgParser(
+        return ComdirectParser(
             filename,
             self.settings.get('encoding', 'cp1252'),
             self.settings.get('account', ''),
@@ -30,9 +30,9 @@ def _truncate_str(s):
     return s[:46] + '...' if len(s) > 49 else s
 
 
-class SparkasseFreiburgParser(StatementParser):
+class ComdirectParser(StatementParser):
     """
-    Parses CSV files as downloaded from the Sparkasse's homepage. Following
+    TODO: Parses CSV files as downloaded from the Sparkasse's homepage. Following
     columns are expected:
 
         "Auftragskonto"
@@ -54,13 +54,13 @@ class SparkasseFreiburgParser(StatementParser):
         "Info"
     """
 
-    date_format = '%d.%m.%y'
+    date_format = '%d.%m.%Y'
     statement = None
 
     def __init__(self, file_name, file_encoding, account_id):
         self.statement = Statement(
             currency='EUR',
-            bank_id='FRSPDE66XXX',  # BIC Sparkasse Freiburg
+            bank_id='FRSPDE66XXX',  # FIXME: BIC Sparkasse Freiburg
             account_id=account_id,
             )
         self.file_name = file_name
@@ -88,14 +88,19 @@ class SparkasseFreiburgParser(StatementParser):
 
         """
         sl = StatementLine()
-        sl.amount = Decimal(line['Betrag'].replace(',', '.'))
+        print(line)
+        if (line['Buchungstag'] == "offen"):
+            return None
+        sl.amount = Decimal(line['Umsatz in EUR']
+                            .replace('.', '')
+                            .replace(',', '.'))
         # TODO trntype could be improved using 'Buchungstext'
         if sl.amount.is_signed():
             sl.trntype = 'DEBIT'
         else:
             sl.trntype = 'CREDIT'
         # .date: It is debatable whether to use 'Buchungstag' or 'Valutadatum'
-        sl.date = self.parse_datetime(line['Valutadatum'])
+        sl.date = self.parse_datetime(line['Wertstellung (Valuta)'])
         # .date_user is not contained in the original CSV
 
         # .payee becomes OFX.NAME which becomes "Description" in gnuCash
@@ -114,18 +119,11 @@ class SparkasseFreiburgParser(StatementParser):
         # I prefer to have a description in .payee because that's what it ends
         # up being in gnuCash.
 
-        recipient = _truncate_str(line['Beguenstigter/Zahlungspflichtiger'])
+        recipient = _truncate_str(line['Buchungstext'])
         if not recipient:
             recipient = 'UNBEKANNT'
-        sl.payee = "{}; {}".format(
-            _truncate_str(line['Verwendungszweck']),
-            recipient,
-            )
-        sl.memo = "{}; IBAN: {}; BIC: {}".format(
-            line['Buchungstext'].strip(),
-            line['Kontonummer/IBAN'].strip(),
-            line['BIC (SWIFT-Code)'].strip(),
-            )
+        sl.payee = recipient
+        sl.memo = recipient
 
         m = sha256()
         m.update(str(sl.date).encode('utf-8'))
